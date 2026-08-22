@@ -14,7 +14,7 @@ import {
   rank,
   shouldAutoApply,
 } from "./suggest";
-import { parseSimilar, searchUrl } from "./similar";
+import { bestMatch, parseSimilar, searchUrl } from "./similar";
 
 const ok = (cond: unknown, msg: string) => {
   if (!cond) throw new Error(msg);
@@ -148,5 +148,59 @@ ok(
 
 throws(() => parseSimilar("no json here"), /did not return JSON/);
 throws(() => parseSimilar('[{"artist":"X"}]'), /no usable tracks/);
+
+// Catalogue matching. What a catalogue adds to a title must not lose the match.
+const want = { title: "Nightcall", artist: "Kavinsky", why: "" };
+const entry = (title: string, artist: string, uri = "spotify:track:1") => ({
+  uri,
+  title,
+  artist,
+  album: "",
+});
+same(
+  bestMatch(want, [entry("Nightcall - 2013 Remaster", "Kavinsky")])?.title,
+  "Nightcall - 2013 Remaster",
+  "a remaster is still the track",
+);
+same(
+  bestMatch({ title: "Odd Look", artist: "Kavinsky", why: "" }, [
+    entry("Odd Look (feat. The Weeknd)", "Kavinsky"),
+  ])?.artist,
+  "Kavinsky",
+  "a featured credit is still the track",
+);
+
+// The one that matters: an invented track still returns the artist's real
+// songs, and accepting any of them would queue something nobody asked for.
+same(
+  bestMatch({ title: "Midnight Drive", artist: "Kavinsky", why: "" }, [
+    entry("Nightcall", "Kavinsky"),
+    entry("Protovision", "Kavinsky"),
+  ]),
+  null,
+  "a track the artist never released is not matched to another of theirs",
+);
+same(
+  bestMatch(want, [entry("Nightcall", "London Grammar")]),
+  null,
+  "a cover by someone else is not the suggestion",
+);
+
+// A short title must not match a longer one that merely contains it.
+same(
+  bestMatch({ title: "Tesla", artist: "Lazerhawk", why: "" }, [
+    entry("Tesla Girls", "Lazerhawk"),
+  ]),
+  null,
+  "a title that only contains the suggestion is not it",
+);
+
+// Given both, the closer one wins rather than the first one back.
+same(
+  bestMatch(want, [entry("Nightcall - Remaster", "Kavinsky", "a"), entry("Nightcall", "Kavinsky", "b")])
+    ?.uri,
+  "b",
+  "the closest catalogue entry wins",
+);
 
 console.log("suggest: ok");

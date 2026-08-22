@@ -365,7 +365,7 @@ pub async fn spotify_connect(client_id: String) -> Result<Status, String> {
     let deadline = Instant::now() + AUTH_WAIT;
     // Bind before the browser opens, or a fast redirect finds nothing there.
     let waiting = tauri::async_runtime::spawn_blocking(move || await_callback(deadline));
-    crate::open_url(url)?;
+    crate::shell_open(&url)?;
 
     let query = waiting
         .await
@@ -490,18 +490,24 @@ pub async fn spotify_play(uri: String) -> Result<(), String> {
 mod crypto {
     use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
     use base64::Engine as _;
-    use windows::Win32::Foundation::HLOCAL;
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::{LocalFree, HLOCAL};
     use windows::Win32::Security::Cryptography::{
-        BCryptGenRandom, CryptProtectData, CryptUnprotectData, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
-        CRYPT_INTEGER_BLOB,
+        BCryptGenRandom, CryptProtectData, CryptUnprotectData, BCRYPT_ALG_HANDLE,
+        BCRYPT_USE_SYSTEM_PREFERRED_RNG, CRYPT_INTEGER_BLOB,
     };
-    use windows::Win32::System::Memory::LocalFree;
 
     /// 32 bytes from the system CSPRNG, base64url'd - a valid PKCE verifier
     /// (43 chars, inside the 43-128 the spec allows) and a fine `state`.
     pub fn random_token() -> Result<String, String> {
         let mut bytes = [0u8; 32];
-        unsafe { BCryptGenRandom(None, &mut bytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG) }
+        unsafe {
+            BCryptGenRandom(
+                BCRYPT_ALG_HANDLE::default(),
+                &mut bytes,
+                BCRYPT_USE_SYSTEM_PREFERRED_RNG,
+            )
+        }
             .ok()
             .map_err(|e| format!("Could not generate a login secret: {e}"))?;
         Ok(URL_SAFE_NO_PAD.encode(bytes))
@@ -517,7 +523,7 @@ mod crypto {
     /// Copy the output blob out and give its memory back.
     unsafe fn take(out: CRYPT_INTEGER_BLOB) -> Vec<u8> {
         let v = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
-        let _ = LocalFree(Some(HLOCAL(out.pbData as *mut _)));
+        let _ = LocalFree(HLOCAL(out.pbData as *mut _));
         v
     }
 
@@ -527,7 +533,7 @@ mod crypto {
         let mut input = secret.as_bytes().to_vec();
         let mut out = CRYPT_INTEGER_BLOB::default();
         unsafe {
-            CryptProtectData(&blob(&mut input), None, None, None, None, 0, &mut out)
+            CryptProtectData(&blob(&mut input), PCWSTR::null(), None, None, None, 0, &mut out)
                 .map_err(|e| format!("Could not protect the Spotify token: {e}"))?;
             Ok(STANDARD.encode(take(out)))
         }

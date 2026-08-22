@@ -4,6 +4,7 @@ mod approuting;
 mod autostart;
 mod audio;
 mod eapo;
+mod engine;
 mod media;
 mod musicbrainz;
 mod rank;
@@ -34,6 +35,10 @@ struct EapoStatus {
     writable: bool,
     /// Endpoints Equalizer APO is actually hooked into. EQ on anything else is silent.
     hooked_devices: usize,
+    /// Whether this build carries the installer, or only a link to it.
+    installer_bundled: bool,
+    /// Whether there is an endpoint registry snapshot to restore from.
+    has_backup: bool,
 }
 
 #[tauri::command]
@@ -67,14 +72,18 @@ fn save_settings(state: State<AppState>, settings: Settings) -> Result<String, S
 /// included. `rundll32` is used rather than `cmd /C start` so nothing goes
 /// through a shell parser on the way.
 #[tauri::command]
-pub(crate) fn open_url(url: String) -> Result<(), String> {
+fn open_url(url: String) -> Result<(), String> {
+    shell_open(&url)
+}
+
+pub(crate) fn shell_open(url: &str) -> Result<(), String> {
     const ALLOWED: [&str; 3] = ["https://", "http://", "spotify:"];
     if !ALLOWED.iter().any(|s| url.starts_with(s)) {
         return Err(format!("Refusing to open {}", url.chars().take(40).collect::<String>()));
     }
     std::process::Command::new("rundll32.exe")
         .arg("url.dll,FileProtocolHandler")
-        .arg(&url)
+        .arg(url)
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("Could not open the link: {e}"))
@@ -135,7 +144,7 @@ fn set_autostart(on: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn eapo_status() -> EapoStatus {
+fn eapo_status(app: AppHandle) -> EapoStatus {
     let path = eapo::config_path();
     let writable = path
         .as_ref()
@@ -146,7 +155,28 @@ fn eapo_status() -> EapoStatus {
         config_path: path.map(|p| p.display().to_string()),
         writable,
         hooked_devices: audio::list().iter().filter(|d| d.eapo).count(),
+        installer_bundled: engine::bundled_installer(&app).is_some(),
+        has_backup: engine::backup_exists(),
     }
+}
+
+/// Snapshot the endpoint registry, then hand off to Equalizer APO's installer.
+#[tauri::command]
+fn install_engine(app: AppHandle) -> Result<String, String> {
+    engine::install(&app)
+}
+
+/// Equalizer APO's own device picker, for hooking an endpoint after the fact.
+#[tauri::command]
+fn open_configurator() -> Result<(), String> {
+    engine::open_configurator()
+}
+
+/// Unhook every endpoint and restore the pre-install registry snapshot. The
+/// escape hatch for an endpoint that went silent, not a normal uninstall.
+#[tauri::command]
+fn restore_audio_endpoints() -> Result<(), String> {
+    engine::restore()
 }
 
 /// Equalizer APO lives under Program Files, so whether we can write its config
@@ -339,6 +369,9 @@ pub fn run() {
             app_version,
             check_update,
             install_update,
+            install_engine,
+            open_configurator,
+            restore_audio_endpoints,
         ])
         // The window is the app's face, not the app: auto-switching, app rules
         // and the spectrum all need the process alive. Closing hides it unless

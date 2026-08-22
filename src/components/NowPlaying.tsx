@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence, motion } from "motion/react";
-import { AiConfig, NowPlayingInfo, RepeatMode } from "../types";
-import { SimilarTrack, askSimilar, play } from "../similar";
+import { AiConfig, NowPlayingInfo, RepeatMode, SpotifyStatus } from "../types";
+import { Resolved, askSimilar, openSearch, playNow, queue, resolve } from "../similar";
 import { Spectrum } from "./Spectrum";
 
 const send = (action: string, value?: number, id?: string) =>
@@ -170,10 +170,12 @@ export function NowPlaying({ cfg }: { cfg: AiConfig }) {
   /** What we asked for but have not been told happened yet. */
   const [pending, setPending] = useState<boolean | null>(null);
   const [vol, setVol] = useState<number | null>(null);
-  /** "More like this", and the error from asking for it. */
-  const [similar, setSimilar] = useState<SimilarTrack[] | null>(null);
-  const [finding, setFinding] = useState(false);
+  /** "More like this": the picks, what stage it is at, and what went wrong. */
+  const [similar, setSimilar] = useState<Resolved[] | null>(null);
+  const [stage, setStage] = useState<"" | "asking" | "checking">("");
   const [simError, setSimError] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [spotify, setSpotify] = useState<SpotifyStatus | null>(null);
   const volAt = useRef(0);
   const seeked = useRef({ ms: 0, at: 0 });
 
@@ -211,22 +213,48 @@ export function NowPlaying({ cfg }: { cfg: AiConfig }) {
 
   const playing = pending ?? np?.playing ?? false;
 
+  // Whether there is a Spotify login decides whether picks can be played or
+  // only looked up, so it is read once and re-read after settings may have
+  // changed it - the panel is cheap and says nothing over the network.
+  useEffect(() => {
+    invoke<SpotifyStatus>("spotify_status").then(setSpotify).catch(() => {});
+  }, [cfg]);
+
   // A list is about the track it was asked for; a new one invalidates it.
   useEffect(() => {
     setSimilar(null);
     setSimError(null);
+    setNote("");
   }, [np?.title]);
 
   const findSimilar = async () => {
-    setFinding(true);
     setSimError(null);
+    setNote("");
+    setStage("asking");
     try {
-      setSimilar(await askSimilar(cfg, np));
+      const picks = await askSimilar(cfg, np);
+      // Show them straight away: the catalogue pass takes seconds, and a list
+      // you can already read is better than a spinner in front of one.
+      setSimilar(picks.map((p) => ({ ...p, uri: null, found: "unchecked" })));
+      setStage("checking");
+      setSimilar(await resolve(picks, !!spotify?.connected));
     } catch (e) {
       setSimilar(null);
       setSimError(String(e));
     } finally {
-      setFinding(false);
+      setStage("");
+    }
+  };
+
+  /** Queue, play now, or - with no Spotify - open a search for it. */
+  const act = async (t: Resolved, now: boolean) => {
+    setSimError(null);
+    try {
+      if (!t.uri) return await openSearch(np?.app ?? "", t);
+      await (now ? playNow(t.uri) : queue(t.uri));
+      setNote(now ? `Playing ${t.title}` : `Queued ${t.title}`);
+    } catch (e) {
+      setSimError(String(e));
     }
   };
 
@@ -266,6 +294,10 @@ export function NowPlaying({ cfg }: { cfg: AiConfig }) {
     vol !== null && performance.now() - volAt.current < VOLUME_GRACE ? vol : (np?.volume ?? 0);
   const others = np?.sources.filter((s) => s.id !== np.source_id) ?? [];
   const store = /spotify/i.test(np?.app ?? "") ? "Spotify" : "YouTube Music";
+  /** Connected means a pick can be queued outright rather than searched for. */
+  const canPlay = !!spotify?.connected;
+  const dropped = similar?.filter((t) => t.found === "missing").length ?? 0;
+  const shownPicks = similar?.filter((t) => t.found !== "missing") ?? [];
 
   return (
     <AnimatePresence>
@@ -352,12 +384,16 @@ export function NowPlaying({ cfg }: { cfg: AiConfig }) {
                   {cfg.model && np.title && (
                     <button
                       onClick={findSimilar}
-                      disabled={finding}
-                      title={`Ask the AI for tracks like this one, and open a pick in ${store}`}
+                      disabled={!!stage}
+                      title={
+                        canPlay
+                          ? "Ask the AI for tracks like this one and queue them in Spotify"
+                          : `Ask the AI for tracks like this one. Connect Spotify in settings to queue them; without it a pick opens in ${store}.`
+                      }
                       className="chip ml-auto shrink-0 border border-glow/30 bg-glow/[0.08] text-glow disabled:opacity-40"
                     >
                       <span className="pr-1 opacity-70">✦</span>
-                      {finding ? "Finding…" : "Similar"}
+                      {stage === "asking" ? "Asking…" : stage === "checking" ? "Checking…" : "Similar"}
                     </button>
                   )}
                 </div>
@@ -478,8 +514,8 @@ export function NowPlaying({ cfg }: { cfg: AiConfig }) {
               </div>
             </div>
 
-            {/* SMTC controls the session that exists, it cannot queue into
-                someone else's app - so a pick opens a search there instead. */}
+            {/* Where the picks land. With Spotify connected they go into its
+                queue; without it they are only verified and opened. */}
             <AnimatePresence>
               {(similar || simError) && (
                 <motion.div
@@ -490,29 +526,62 @@ export function NowPlaying({ cfg }: { cfg: AiConfig }) {
                   className="relative overflow-hidden border-t border-white/[0.07]"
                 >
                   <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
-                    {simError ? (
-                      <p className="text-[11px] text-rose-300">{simError}</p>
-                    ) : (
-                      similar!.map((t) => (
+                    {shownPicks.map((t) => (
+                      <span
+                        key={`${t.artist}|${t.title}`}
+                        className="flex max-w-full items-stretch overflow-hidden rounded-lg border border-white/10 bg-white/[0.04] transition-colors hover:border-white/25"
+                      >
                         <button
-                          key={`${t.artist}|${t.title}`}
                           type="button"
-                          onClick={() =>
-                            play(np.app, t).catch((e) => setSimError(String(e)))
-                          }
-                          title={`${t.why || "Similar to this"} — opens a search in ${store}`}
-                          className="max-w-full truncate rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-slate-300 transition-colors hover:border-white/25 hover:text-slate-100"
+                          onClick={() => act(t, false)}
+                          title={`${t.why || "Similar to this"} — ${
+                            t.uri
+                              ? "queue after this track"
+                              : t.found === "unchecked"
+                                ? `not verified, opens a search in ${store}`
+                                : `opens a search in ${store}`
+                          }`}
+                          className="truncate px-2.5 py-1 text-xs text-slate-300 hover:text-slate-100"
                         >
                           {t.title}
                           <span className="pl-1 text-slate-500">{t.artist}</span>
                         </button>
-                      ))
+                        {/* Play now is a second target rather than a modifier
+                            click: a queue you did not want is undoable, a skip
+                            over what you were listening to is not. */}
+                        {t.uri && (
+                          <button
+                            type="button"
+                            onClick={() => act(t, true)}
+                            aria-label={`Play ${t.title} now`}
+                            title="Play now"
+                            className="border-l border-white/10 px-1.5 text-[10px] text-slate-500 hover:bg-white/[0.06] hover:text-glow"
+                          >
+                            ▸
+                          </button>
+                        )}
+                      </span>
+                    ))}
+
+                    {canPlay && shownPicks.some((t) => t.uri) && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          for (const t of shownPicks) if (t.uri) await act(t, false);
+                          setNote(`Queued ${shownPicks.filter((t) => t.uri).length} tracks`);
+                        }}
+                        className="chip shrink-0 border border-glow/30 bg-glow/[0.08] text-glow"
+                      >
+                        Queue all
+                      </button>
                     )}
+
                     <button
                       type="button"
                       onClick={() => {
                         setSimilar(null);
                         setSimError(null);
+                        setNote("");
                       }}
                       aria-label="Hide similar tracks"
                       className="ml-auto shrink-0 text-[11px] text-slate-500 hover:text-slate-300"
@@ -520,6 +589,30 @@ export function NowPlaying({ cfg }: { cfg: AiConfig }) {
                       Close
                     </button>
                   </div>
+
+                  {/* One line of truth about what just happened, and about what
+                      was quietly thrown away - a shorter list than you asked
+                      for should never be silent. */}
+                  <p
+                    className={`px-4 pb-2.5 text-[11px] ${
+                      simError ? "text-rose-300" : "text-slate-500"
+                    }`}
+                  >
+                    {simError ||
+                      note ||
+                      [
+                        stage === "checking" && "Checking the catalogue…",
+                        dropped > 0 &&
+                          `${dropped} suggestion${dropped > 1 ? "s" : ""} dropped — no such track.`,
+                        shownPicks.some((t) => t.found === "unchecked") &&
+                          "Could not verify these against a catalogue.",
+                        !canPlay &&
+                          !stage &&
+                          "Connect Spotify in settings to queue these instead of searching.",
+                      ]
+                        .filter(Boolean)
+                        .join(" ") || " "}
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
