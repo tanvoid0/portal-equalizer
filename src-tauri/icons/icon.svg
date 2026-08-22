@@ -1,0 +1,43 @@
+<svg viewBox="0 0 512 512" width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Portal Equalizer. An aperture seen edge-on with the signal running straight
+    through it: two arcs facing each other, three bands at EQ heights. Drawn to
+    survive 16px in a taskbar, which is where it spends most of its life - the
+    arcs are open top and bottom precisely so the centre band can exit without
+    ever touching them, and nothing here is smaller than a 26px stroke.
+
+    Gradients are userSpaceOnUse, not the objectBoundingBox default: the bands
+    are perfectly vertical paths, so their bounding box has zero width and a
+    proportional gradient collapses them to nothing.
+  -->
+  <defs>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="116" y1="116" x2="396" y2="396">
+      <stop offset="0%" stop-color="#5eead4"/>
+      <stop offset="55%" stop-color="#67d9e8"/>
+      <stop offset="100%" stop-color="#818cf8"/>
+    </linearGradient>
+    <linearGradient id="tile" gradientUnits="userSpaceOnUse" x1="77" y1="0" x2="435" y2="512">
+      <stop offset="0%" stop-color="#1a1f2e"/>
+      <stop offset="100%" stop-color="#0a0c12"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="60%" stop-color="#5eead4" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#5eead4" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#tile)"/>
+  <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="4"/>
+  <circle cx="256" cy="256" r="150" fill="url(#halo)"/>
+
+  <!-- 2*pi*140 = 880, so 293/147 twice closes the ring at 120 degrees of arc
+       and 60 degrees of gap; the offset puts a gap at top and bottom centre. -->
+  <circle cx="256" cy="256" r="140" fill="none" stroke="url(#g)" stroke-width="26"
+          stroke-linecap="round" stroke-dasharray="293 147" stroke-dashoffset="146.5"/>
+
+  <g stroke="url(#g)" stroke-width="34" stroke-linecap="round">
+    <path d="M180 316V226"/>
+    <path d="M256 404V108"/>
+    <path d="M332 296V206"/>
+  </g>
+</svg>

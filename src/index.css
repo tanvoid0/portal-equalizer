@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ink-900 text-slate-200 antialiased;
+    /* A single soft light source top-left keeps the flat panels from reading as
+       stickers on a black rectangle. */
+    background-image:
+      radial-gradient(80rem 40rem at -10% -20%, rgba(94, 234, 212, 0.09), transparent 60%),
+      radial-gradient(60rem 40rem at 110% 10%, rgba(129, 140, 248, 0.08), transparent 55%);
+    background-attachment: fixed;
+    overflow: hidden;
+    user-select: none;
+    cursor: default;
+  }
+
+  /* Motion is decoration here; anyone who has asked the OS to stop it gets a
+     static, fully usable app. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-white/10;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/20;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-glow/70 ring-offset-2 ring-offset-ink-900;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-white/[0.07] bg-white/[0.025] backdrop-blur-xl;
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.05) inset,
+      0 20px 40px -24px rgba(0, 0, 0, 0.9);
+  }
+
+  .chip {
+    @apply rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider;
+  }
+
+  /* Chips were all one weight, so "live" and "no eq" shouted equally loudly.
+     Three levels only: what is happening now, what will bite you, and what is
+     merely true. */
+  .chip-live {
+    @apply chip border border-glow/40 bg-glow/20 text-glow;
+  }
+  .chip-warn {
+    @apply chip bg-glow-warm/15 text-glow-warm;
+  }
+  .chip-quiet {
+    @apply chip bg-white/[0.06] text-slate-500;
+  }
+
+  /* A badge is a chip that carries a glyph, so the icon and the word share one
+     baseline instead of the icon riding high on the cap height. */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]
+      font-medium uppercase tracking-wider;
+  }
+
+  /* The same three-part button was written out longhand in five components and
+     had drifted apart in every one of them. */
+  .btn {
+    @apply inline-flex items-center gap-1.5 rounded-lg border border-white/10
+      bg-white/[0.04] px-2.5 py-1 text-[11px] text-slate-300 transition-colors
+      hover:border-white/25 hover:text-slate-100 disabled:pointer-events-none
+      disabled:opacity-30;
+  }
+  .btn-accent {
+    @apply btn hover:border-glow/40 hover:text-glow;
+  }
+  .btn-on {
+    @apply btn border-glow/40 bg-glow/[0.12] text-glow hover:border-glow/60 hover:text-glow;
+  }
+
+  .field {
+    @apply w-full rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5
+      text-xs text-slate-200 placeholder:text-slate-600 focus:border-glow/40
+      focus:outline-none;
+  }
+
+  /* A native select renders the OS chevron and the OS focus ring, which is the
+     one place this window stops looking like itself. Pair with a ChevronIcon. */
+  .select {
+    @apply w-full appearance-none rounded-lg border border-white/10 bg-white/[0.03]
+      py-1.5 pl-2.5 pr-7 text-xs text-slate-200 focus:border-glow/40 focus:outline-none;
+  }
+}
