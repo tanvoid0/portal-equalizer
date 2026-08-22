@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion } from "motion/react";
-import { AiConfig, EapoStatus, PresetMode, Settings } from "../types";
+import { AiConfig, EapoStatus, PresetMode, Settings, SpotifyStatus } from "../types";
 import { PRESETS, SIMPLE } from "../presets";
 import { Switch } from "./Switch";
 import { AlertIcon, ChevronIcon, DevicesIcon, GearIcon, ToneIcon, WandIcon } from "./icons";
@@ -80,6 +80,244 @@ function Updates() {
 }
 
 /** Label, explanation, control. Every setting is one of these. */
+/**
+ * Connecting Spotify is what turns a suggestion into something that plays.
+ *
+ * The client ID has to be the user's own: Spotify's Development Mode allows one
+ * per developer and five users on it, so a shipped shared ID would run out
+ * immediately - and since February 2026 the app owner needs Premium anyway.
+ */
+function SpotifyPanel() {
+  const [st, setSt] = useState<SpotifyStatus | null>(null);
+  const [clientId, setClientId] = useState("");
+  const [busy, setBusy] = useState<"" | "connecting" | "checking">("");
+  const [note, setNote] = useState("");
+  const [bad, setBad] = useState(false);
+
+  const take = (s: SpotifyStatus) => {
+    setSt(s);
+    setClientId(s.client_id);
+  };
+
+  useEffect(() => {
+    invoke<SpotifyStatus>("spotify_status").then(take).catch(() => {});
+  }, []);
+
+  const run = async (what: "connecting" | "checking") => {
+    setBusy(what);
+    setNote(what === "connecting" ? "Finish the sign-in in your browser…" : "");
+    setBad(false);
+    try {
+      const s =
+        what === "connecting"
+          ? await invoke<SpotifyStatus>("spotify_connect", { clientId })
+          : await invoke<SpotifyStatus>("spotify_me");
+      take(s);
+      // Premium is not a nicety here: every playback call 403s without it.
+      const free = s.product && s.product !== "premium";
+      setBad(!!free);
+      setNote(
+        free
+          ? `Signed in as ${s.name || "your account"}, but this account is ${s.product} — Spotify only allows playback control on Premium.`
+          : `Connected as ${s.name || "your account"}.`,
+      );
+    } catch (e) {
+      setBad(true);
+      setNote(String(e));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const disconnect = async () => {
+    await invoke("spotify_disconnect").catch(() => {});
+    setSt((s) => (s ? { ...s, connected: false, name: "", product: "" } : s));
+    setNote("Disconnected. The saved token has been deleted.");
+    setBad(false);
+  };
+
+  return (
+    <div className="border-t border-white/[0.05] py-3">
+      <div className="flex items-center gap-2 pb-2.5 text-[11px]">
+        <span
+          className={`h-2 w-2 shrink-0 rounded-full ${
+            bad ? "bg-glow-hot" : st?.connected ? "bg-glow" : "bg-slate-600"
+          }`}
+        />
+        <span className="min-w-0 flex-1 truncate text-slate-400" title={note}>
+          {note || (st?.connected ? "Spotify connected" : "Spotify not connected")}
+        </span>
+        {st?.connected && (
+          <button type="button" className="btn" onClick={() => run("checking")} disabled={!!busy}>
+            {busy === "checking" ? "Checking…" : "Check"}
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn"
+          onClick={() => (st?.connected ? disconnect() : run("connecting"))}
+          disabled={!!busy || (!st?.connected && !clientId.trim())}
+        >
+          {st?.connected ? "Disconnect" : busy === "connecting" ? "Waiting…" : "Connect"}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-2 text-[11px] text-slate-400">
+        <span>Client ID</span>
+        <input
+          value={clientId}
+          onChange={(e) => setClientId(e.target.value)}
+          placeholder="from developer.spotify.com/dashboard"
+          className="field"
+        />
+
+        <span>Redirect URI</span>
+        {/* Read-only because Spotify matches it exactly, and the port is fixed
+            on our side - it has to be pasted into the dashboard verbatim. */}
+        <input
+          readOnly
+          value={st?.redirect_uri ?? ""}
+          onFocus={(e) => e.currentTarget.select()}
+          className="field text-slate-500"
+        />
+      </div>
+
+      <p className="pt-2 text-[11px] leading-relaxed text-slate-600">
+        Create an app at developer.spotify.com/dashboard, tick <em>Web API</em>, paste the
+        redirect URI above into it, then paste its client ID here. Queueing needs Premium.
+        Without any of this the suggestions still get checked against MusicBrainz, and a pick
+        opens a search instead of playing.
+      </p>
+    </div>
+  );
+}
+
+/** Install, hook and un-hook the DSP engine.
+ *
+ * Holds its own copy of the status because every button here changes it, and
+ * re-polling on the spot is cheaper than threading a refresh callback back up
+ * through the whole settings page.
+ */
+function EnginePanel({ initial }: { initial: EapoStatus | null }) {
+  const [st, setSt] = useState(initial);
+  const [busy, setBusy] = useState<"install" | "configure" | "restore" | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [note, setNote] = useState("");
+  const [bad, setBad] = useState(false);
+
+  useEffect(() => setSt(initial), [initial]);
+
+  const refresh = () =>
+    invoke<EapoStatus>("eapo_status").then(setSt).catch(() => {});
+
+  const run = async (job: "install" | "configure" | "restore") => {
+    setBusy(job);
+    setConfirming(false);
+    try {
+      const cmd =
+        job === "install"
+          ? "install_engine"
+          : job === "configure"
+            ? "open_configurator"
+            : "restore_audio_endpoints";
+      const said = await invoke<string | null>(cmd);
+      setBad(false);
+      setNote(
+        said ??
+          (job === "restore"
+            ? "Endpoints restored. Reboot for it to take effect."
+            : "Equalizer APO's Configurator is open."),
+      );
+    } catch (e) {
+      setBad(true);
+      setNote(String(e));
+    } finally {
+      setBusy(null);
+      // The installer runs on its own clock, so this only catches the fast
+      // cases. The real confirmation is the status after the reboot.
+      refresh();
+    }
+  };
+
+  return (
+    <>
+      <Row
+        title="Status"
+        hint={
+          !st?.installed
+            ? st?.installer_bundled === false
+              ? "Not installed, and this build ships without the installer — the button opens the download page."
+              : "Not installed. Nothing here is audible until it is: Equalizer APO is the engine, this app is the interface."
+            : st.hooked_devices === 0
+              ? "Installed but hooked into no endpoint, so every EQ here is silent. Add one, then reboot."
+              : `Hooked into ${st.hooked_devices} endpoint${
+                  st.hooked_devices === 1 ? "" : "s"
+                }. EQ on any other one is silent — add it below.`
+        }
+      >
+        <div className="flex items-center gap-2">
+          <span
+            className={
+              st?.installed && st.writable && st.hooked_devices > 0 ? "chip-live" : "chip-warn"
+            }
+          >
+            {!st?.installed ? "missing" : !st.writable ? "read-only" : st.hooked_devices === 0 ? "unhooked" : "ready"}
+          </span>
+          <button
+            type="button"
+            className="btn-accent"
+            disabled={!!busy}
+            onClick={() => run(st?.installed ? "configure" : "install")}
+          >
+            {busy === "install" || busy === "configure"
+              ? "Waiting…"
+              : st?.installed
+                ? "Add devices"
+                : "Install engine"}
+          </button>
+        </div>
+      </Row>
+
+      {note && (
+        <p className={`pb-2 text-[11px] leading-relaxed ${bad ? "text-glow-hot" : "text-slate-400"}`}>
+          {note}
+        </p>
+      )}
+
+      <Row title="Config file" hint={st?.config_path ?? "No config path found."}>
+        <span className="chip-quiet">generated</span>
+      </Row>
+
+      {st?.has_backup && (
+        <Row
+          title="Restore endpoints"
+          hint="Puts every audio endpoint back to how it was before the engine was installed, and unhooks it from all of them. For when an endpoint has gone silent — not a normal uninstall."
+        >
+          {confirming ? (
+            <div className="flex items-center gap-2">
+              <button type="button" className="btn" onClick={() => setConfirming(false)}>
+                Cancel
+              </button>
+              <button type="button" className="btn-on" onClick={() => run("restore")}>
+                Confirm
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn"
+              disabled={!!busy}
+              onClick={() => setConfirming(true)}
+            >
+              {busy === "restore" ? "Restoring…" : "Restore"}
+            </button>
+          )}
+        </Row>
+      )}
+    </>
+  );
+}
+
 function Row({
   title,
   hint,
@@ -144,7 +382,9 @@ export function SettingsPage({
   const check = useCallback(async () => {
     setConn(null);
     try {
-      const ids = await invoke<string[]>("ai_models", { cfg: settings.ai });
+      // A server that answers with null rather than a list would otherwise take
+      // the whole settings page down at the `models.length` below.
+      const ids = (await invoke<string[] | null>("ai_models", { cfg: settings.ai })) ?? [];
       setModels(ids);
       setConn({ ok: true, note: `${ids.length} models available` });
       if (!settings.ai.model && ids.length) setAi({ model: ids[0] });
@@ -402,29 +642,12 @@ export function SettingsPage({
               cannot tell what the track is.
             </p>
           </div>
+
+          <SpotifyPanel />
         </Group>
 
         <Group id="engine" title="Equalizer APO">
-          <Row
-            title="Status"
-            hint={
-              status?.installed
-                ? `Hooked into ${status.hooked_devices} endpoint${
-                    status.hooked_devices === 1 ? "" : "s"
-                  }. EQ on any other one is silent — re-run the Equalizer APO Configurator to add it.`
-                : "Not installed. Nothing here is audible until it is: Equalizer APO is the engine, this app is the interface."
-            }
-          >
-            <span className={status?.installed && status.writable ? "chip-live" : "chip-warn"}>
-              {!status?.installed ? "missing" : status.writable ? "ready" : "read-only"}
-            </span>
-          </Row>
-          <Row
-            title="Config file"
-            hint={status?.config_path ?? "No config path found."}
-          >
-            <span className="chip-quiet">generated</span>
-          </Row>
+          <EnginePanel initial={status} />
         </Group>
       </div>
     </motion.div>

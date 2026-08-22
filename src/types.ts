@@ -77,6 +77,27 @@ export interface AiConfig {
   auto: boolean;
 }
 
+/** Spotify connection, from `spotify.rs`. Playing a suggestion needs one. */
+export interface SpotifyStatus {
+  /** A sealed refresh token is on disk - not that it still works. */
+  connected: boolean;
+  client_id: string;
+  /** Must be pasted into the Spotify dashboard character for character. */
+  redirect_uri: string;
+  /** Only filled in by `spotify_me`, which actually asks. */
+  name: string;
+  /** "premium" or "free". Only Premium can control playback. */
+  product: string;
+}
+
+/** A real catalogue entry. From Spotify, or from MusicBrainz with no `uri`. */
+export interface CatalogueTrack {
+  uri: string;
+  title: string;
+  artist: string;
+  album: string;
+}
+
 /** Spectral fingerprint of what is playing right now, from `analyze.rs`. */
 export interface Features {
   /** Level per EQ band, dB. */
@@ -138,6 +159,10 @@ export interface EapoStatus {
   config_path: string | null;
   writable: boolean;
   hooked_devices: number;
+  /** Whether this build carries the engine installer, or only a link to it. */
+  installer_bundled: boolean;
+  /** Whether there is an endpoint registry snapshot to restore from. */
+  has_backup: boolean;
 }
 
 /** Must stay in step with `eapo::BANDS` on the Rust side. */

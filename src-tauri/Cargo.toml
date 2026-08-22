@@ -46,6 +46,10 @@ features = [
   "Win32_System_WinRT",
   "Win32_System_Diagnostics_ToolHelp",
   "Win32_UI_Shell_PropertiesSystem",
+  # ShellExecuteW with the "runas" verb: the only way to raise the UAC prompt
+  # Equalizer APO's installer and Configurator both need.
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
   "Win32_Devices_FunctionDiscovery",
   # DPAPI for the stored Spotify refresh token, and the system CSPRNG the
   # PKCE verifier is drawn from.
