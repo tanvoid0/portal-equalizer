@@ -83,11 +83,15 @@ export const VirtualIcon = (p: P) => (
   </Svg>
 );
 
+/**
+ * The Devices pane. A stack of endpoints ranked by priority - which is what
+ * that pane actually is. The first draft drew a monitor beside a phone and
+ * read as "displays".
+ */
 export const DevicesIcon = (p: P) => (
   <Svg {...p}>
-    <rect x="2.5" y="5" width="12" height="14" rx="2" />
-    <path d="M17.5 8.5h4v11h-4z" />
-    <path d="M8.5 15.5h0" />
+    <path d="M4 6.5h13M4 12h9M4 17.5h5" strokeWidth="1.9" />
+    <circle cx="20" cy="6.5" r="1.3" />
   </Svg>
 );
 
