@@ -64,11 +64,12 @@ jobs:
           releaseBody: |
             ## Portal Equalizer v__VERSION__
 
-            ### Requires Equalizer APO
+            ### Needs Equalizer APO
 
             The DSP is [Equalizer APO](https://sourceforge.net/projects/equalizerapo/);
-            this app generates its config. Install it and hook the endpoints you
-            care about with its Configurator, or nothing here is audible.
+            this app generates its config. Open **Settings -> Engine** and press
+            **Install engine** to get it, and tick every endpoint you want EQ on.
+            Until an endpoint is hooked, nothing here is audible.
 
             ### Downloads
 
@@ -77,6 +78,8 @@ jobs:
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
           # Needs bundle.createUpdaterArtifacts so the .sig files exist and
-          # latest.json can be assembled.
-          uploadUpdaterJson: true
+          # latest.json can be assembled. The input is `includeUpdaterJson`;
+          # it was spelled `uploadUpdaterJson` here, which the action ignored
+          # with a warning rather than an error.
+          includeUpdaterJson: true
           updaterJsonPreferNsis: true
