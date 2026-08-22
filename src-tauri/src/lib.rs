@@ -5,8 +5,10 @@ mod autostart;
 mod audio;
 mod eapo;
 mod media;
+mod musicbrainz;
 mod rank;
 mod spectrum;
+mod spotify;
 mod store;
 
 use audio::{Device, Flow};
@@ -18,6 +20,7 @@ use store::Settings;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_updater::UpdaterExt;
 
 struct AppState {
     settings: Mutex<Settings>,
@@ -57,6 +60,26 @@ fn save_settings(state: State<AppState>, settings: Settings) -> Result<String, S
 
 /// Propose a sensible priority order so the user does not have to drag thirty
 /// endpoints into place by hand.
+/// Hand a URL to the shell, for the "play something similar" picks.
+///
+/// The URL is built from a model reply, so the scheme is allowlisted:
+/// `FileProtocolHandler` launches whatever a scheme is registered to, `file:`
+/// included. `rundll32` is used rather than `cmd /C start` so nothing goes
+/// through a shell parser on the way.
+#[tauri::command]
+pub(crate) fn open_url(url: String) -> Result<(), String> {
+    const ALLOWED: [&str; 3] = ["https://", "http://", "spotify:"];
+    if !ALLOWED.iter().any(|s| url.starts_with(s)) {
+        return Err(format!("Refusing to open {}", url.chars().take(40).collect::<String>()));
+    }
+    std::process::Command::new("rundll32.exe")
+        .arg("url.dll,FileProtocolHandler")
+        .arg(&url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Could not open the link: {e}"))
+}
+
 #[tauri::command]
 fn smart_organise() -> Vec<String> {
     rank::smart_order(&audio::list())
@@ -240,11 +263,51 @@ fn watch(app: AppHandle, engine: spectrum::Engine) {
     });
 }
 
+/// The running version, for the settings page to show next to the update check.
+#[tauri::command]
+fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+/// The new version if the release feed offers one, `None` if we are current.
+///
+/// Only a packaged build can update itself, so in `tauri dev` this reports the
+/// updater as unavailable rather than pretending to be up to date.
+#[tauri::command]
+async fn check_update(app: AppHandle) -> Result<Option<String>, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = updater.check().await.map_err(|e| e.to_string())?;
+    Ok(update.map(|u| u.version))
+}
+
+/// Download, install and restart into the new version.
+///
+/// Checks again rather than holding the handle from `check_update` across the
+/// user's decision, so a stale check cannot install something else.
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("No update available")?;
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    app.restart();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let settings = store::load();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_window(app);
+        }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState {
             settings: Mutex::new(settings),
         })
@@ -254,6 +317,7 @@ pub fn run() {
             save_settings,
             set_default_device,
             smart_organise,
+            open_url,
             eapo_status,
             autostart_enabled,
             set_autostart,
@@ -264,6 +328,17 @@ pub fn run() {
             media::get_now_playing,
             ai::ai_chat,
             ai::ai_models,
+            spotify::spotify_status,
+            spotify::spotify_connect,
+            spotify::spotify_disconnect,
+            spotify::spotify_me,
+            spotify::spotify_search,
+            spotify::spotify_queue,
+            spotify::spotify_play,
+            musicbrainz::mb_search,
+            app_version,
+            check_update,
+            install_update,
         ])
         // The window is the app's face, not the app: auto-switching, app rules
         // and the spectrum all need the process alive. Closing hides it unless

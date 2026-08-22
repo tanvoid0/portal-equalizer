@@ -14,6 +14,13 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
+# Closing the window now hides it, so launching the shortcut again must reach
+# the running copy rather than start a second one that fights it for the
+# default device and the config file.
+tauri-plugin-single-instance = "2"
+# Updates are pulled from the GitHub release feed and verified against the
+# public key in tauri.conf.json - see .github/workflows/release.yml.
+tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 windows-core = "0.58"
 serde_json = "1"
@@ -22,6 +29,10 @@ rustfft = "6"
 winreg = "0.52"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 base64 = "0.22"
+# Both already in the tree under reqwest/tauri; named here so the PKCE challenge
+# and the MusicBrainz rate gate can use them directly.
+sha2 = "0.10"
+tokio = { version = "1", features = ["time"] }
 
 [dependencies.windows]
 version = "0.58"
@@ -36,6 +47,10 @@ features = [
   "Win32_System_Diagnostics_ToolHelp",
   "Win32_UI_Shell_PropertiesSystem",
   "Win32_Devices_FunctionDiscovery",
+  # DPAPI for the stored Spotify refresh token, and the system CSPRNG the
+  # PKCE verifier is drawn from.
+  "Win32_Security_Cryptography",
+  "Win32_System_Memory",
   # SMTC: now-playing metadata, cover art and transport control.
   "Foundation",
   "Foundation_Collections",

@@ -77,6 +77,28 @@ export const autoCurve = (need: number[]) =>
 export const drift = (a: number[] | undefined, b: number[]) =>
   a && a.length === b.length ? a.reduce((s, v, i) => s + Math.abs(v - b[i]), 0) : Infinity;
 
+/** What Smart mode last put on the sliders itself. */
+export interface AutoApplied {
+  /** Track plus source, so an AI answer may still upgrade its own local guess. */
+  key: string;
+  gains: number[];
+}
+
+/**
+ * Whether Smart mode should apply a suggestion on its own.
+ *
+ * Two rules, and they are the whole contract: apply once per track per source,
+ * and never overwrite a curve the listener has touched since. The second is
+ * what keeps it from fighting you - once you drag a band, Smart stops applying
+ * and goes back to only suggesting until the next track.
+ */
+export function shouldAutoApply(on: boolean, key: string, last: AutoApplied | null, applied: number[]) {
+  if (!on) return false;
+  if (!last) return true;
+  if (last.key === key) return false;
+  return last.gains.length === applied.length && last.gains.every((g, i) => g === applied[i]);
+}
+
 export interface AiSuggestion {
   /** A preset name, or "Custom" when `gains` carries a bespoke curve. */
   preset: string;
@@ -139,14 +161,15 @@ ${catalogue()}
 JSON:`;
 }
 
-/** First balanced {...} span in a reply, so a chatty model still parses. */
-function firstObject(text: string): string | null {
-  const start = text.indexOf("{");
+/** First balanced {...} or [...] span in a reply, so a chatty model still parses. */
+export function firstJson(text: string, open: "{" | "[" = "{"): string | null {
+  const close = open === "{" ? "}" : "]";
+  const start = text.indexOf(open);
   if (start < 0) return null;
   let depth = 0;
   for (let i = start; i < text.length; i++) {
-    if (text[i] === "{") depth++;
-    else if (text[i] === "}" && --depth === 0) return text.slice(start, i + 1);
+    if (text[i] === open) depth++;
+    else if (text[i] === close && --depth === 0) return text.slice(start, i + 1);
   }
   return null;
 }
@@ -156,7 +179,7 @@ function firstObject(text: string): string | null {
  * throw with a message fit for a toast.
  */
 export function parseSuggestion(reply: string): AiSuggestion {
-  const raw = firstObject(reply);
+  const raw = firstJson(reply);
   if (!raw) throw new Error(`Model did not return JSON: ${reply.slice(0, 120)}`);
   const parsed = JSON.parse(raw) as Partial<AiSuggestion>;
 

@@ -20,6 +20,7 @@ React + Tailwind + motion  ──invoke/events──  Rust (Tauri 2)
                                                 ├── ai.rs       chat transport to Agent Platform
                                                 ├── media.rs    SMTC now-playing, cover art, transport
                                                 ├── approuting.rs per-app routing rules
+                                                ├── autostart.rs the Run key, for "start with Windows"
                                                 └── store.rs     settings.json
 ```
 
@@ -40,6 +41,24 @@ Diagnostic dump of every endpoint, how it ranks, and the config that would be wr
 ```bash
 cargo run --example probe --manifest-path src-tauri/Cargo.toml
 ```
+
+## Releasing
+
+Tag pushes matching `v*.*.*` build a signed Windows installer, publish it as a
+GitHub release and write the `latest.json` the built-in updater reads. The tag
+has to match `version` in `src-tauri/tauri.conf.json` — the updater compares the
+version baked into the bundle, not the tag, so the workflow refuses a mismatch
+rather than shipping a build nobody updates to.
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+Two repository secrets are needed, from `pnpm tauri signer generate`:
+`TAURI_SIGNING_PRIVATE_KEY` (the contents of the private key file) and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The matching public key lives in
+`tauri.conf.json`; installs verify every update against it, so losing the
+private key means existing installs can never be updated again.
 
 ## Picking a preset for what is playing
 
@@ -82,6 +101,24 @@ The HTTP call is made in Rust rather than with `fetch`: a request from the webvi
 need the platform started with `AGENT_PLATFORM_CORS_ORIGINS` set for the Tauri origin.
 Token goes in Settings ⚙ or `$AGENT_PLATFORM_TOKEN`; blank means no auth header, which is
 what a default local install expects.
+
+## Settings
+
+One page behind the title bar's gear, and the settings the panels used to carry
+themselves — the AI server, the auto-switch toggle — now live there rather than in the
+surface they affect.
+
+- **Start with Windows** writes `HKCU\...\CurrentVersion\Run` and reads it back from
+  there, never from `settings.json`: the user can revoke it from Task Manager's Startup
+  tab and a mirrored copy would go stale and then lie about it.
+- **Close to tray** (default on) hides the window instead of quitting, because
+  auto-switching and app rules only happen while the process is alive. That makes a
+  second launch of the shortcut a hazard — two watchers fighting over the default device
+  — so `tauri-plugin-single-instance` hands the launch to the running copy instead.
+- **Simple / Advanced** cuts the 85-preset catalogue down to one obvious answer per
+  intent. The preset in use is always offered, even when Simple would hide it.
+- **Show inactive / virtual devices** filters the list only. Hidden devices keep their
+  place in the priority order, and whatever is playing right now is never hidden.
 
 ## Things that are true and were not obvious
 

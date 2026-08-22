@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.2.0). Created if it does not exist.'
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Windows only: the app is built on WASAPI, the Run key and Equalizer APO.
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      # The updater compares the version baked into the bundle, not the tag, so
+      # a tag that disagrees with tauri.conf.json ships a build nobody updates to.
+      - name: Tag matches tauri.conf.json version
+        shell: bash
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$tag" != "v$conf" ]; then
+            echo "Tag $tag does not match tauri.conf.json version $conf" >&2
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - run: pnpm install --frozen-lockfile
+
+      # Cheap checks first: a type error or a broken preset matcher should not
+      # cost a full Rust release build to discover.
+      - run: pnpm check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: 'Portal Equalizer v__VERSION__'
+          releaseBody: |
+            ## Portal Equalizer v__VERSION__
+
+            ### Requires Equalizer APO
+
+            The DSP is [Equalizer APO](https://sourceforge.net/projects/equalizerapo/);
+            this app generates its config. Install it and hook the endpoints you
+            care about with its Configurator, or nothing here is audible.
+
+            ### Downloads
+
+            Run the `.exe` installer below. Existing installs update themselves
+            from **Settings → General → Updates**.
+          releaseDraft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+          # Needs bundle.createUpdaterArtifacts so the .sig files exist and
+          # latest.json can be assembled.
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true

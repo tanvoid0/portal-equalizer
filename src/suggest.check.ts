@@ -5,8 +5,16 @@
  * jiti, which is already here as a Tailwind dependency and resolves TypeScript
  * the same way Vite does.
  */
-import { findPreset } from "./presets";
-import { autoCurve, drift, effectiveNeed, parseSuggestion, rank } from "./suggest";
+import { PRESETS, SIMPLE, findPreset } from "./presets";
+import {
+  autoCurve,
+  drift,
+  effectiveNeed,
+  parseSuggestion,
+  rank,
+  shouldAutoApply,
+} from "./suggest";
+import { parseSimilar, searchUrl } from "./similar";
 
 const ok = (cond: unknown, msg: string) => {
   if (!cond) throw new Error(msg);
@@ -62,6 +70,33 @@ same(autoCurve([20, -20, 0.26, 0, 0, 0, 0, 0, 0, 0]).slice(0, 3), [12, -12, 0.5]
 same(drift([0, 0], [1, -2]), 3, "drift");
 same(drift(undefined, [1, 2]), Infinity, "drift with no baseline");
 
+// --- the catalogue -------------------------------------------------------
+
+// Simple mode filters by name, so a typo there silently shortens the list it
+// offers rather than failing anywhere visible.
+for (const name of SIMPLE) {
+  ok(findPreset(name), `Simple mode names a preset that does not exist: ${name}`);
+}
+ok(SIMPLE.size < PRESETS.length, "Simple mode must be shorter than the full catalogue");
+
+// --- Smart mode applying by itself -----------------------------------------
+
+const CURVE = [3, 2, 1, 0, 0, 0, 0, -1, -2, -3];
+ok(!shouldAutoApply(false, "track|local", null, CURVE), "off means never apply");
+ok(shouldAutoApply(true, "track|local", null, CURVE), "first suggestion applies");
+ok(
+  !shouldAutoApply(true, "track|local", { key: "track|local", gains: CURVE }, CURVE),
+  "the same suggestion must not be re-applied every render",
+);
+ok(
+  shouldAutoApply(true, "track|ai", { key: "track|local", gains: CURVE }, CURVE),
+  "the AI answer may still replace its own local guess mid-track",
+);
+ok(
+  !shouldAutoApply(true, "next|local", { key: "track|local", gains: CURVE }, [9, 9, 9, 9, 9, 9, 9, 9, 9, 9]),
+  "a hand-tuned curve is never overwritten",
+);
+
 // --- model replies ---------------------------------------------------------
 
 // Chatty, fenced output still parses.
@@ -83,5 +118,35 @@ same(custom.confidence, 1, "confidence is clamped to 0-1");
 // Junk is rejected rather than silently applied.
 throws(() => parseSuggestion("no json here"), /did not return JSON/);
 throws(() => parseSuggestion('{"preset":"Nonsense","gains":[1,2]}'), /unusable curve/);
+
+// A chatty reply around a list still parses, and the seed never comes back as
+// its own recommendation.
+const like = parseSimilar(
+  'Here you go: [{"title":"Nightcall","artist":"Kavinsky","why":"the seed"},' +
+    '{"title":"Tesla","artist":"Lazerhawk","why":"same neon"},' +
+    '{"title":"Tesla","artist":"Lazerhawk","why":"duplicate"},' +
+    '{"title":"","artist":"Nobody","why":"no title"},' +
+    '{"title":"Turbo Killer","artist":"Carpenter Brut","why":"harder edge"}]',
+  { title: "Nightcall", artist: "Kavinsky" },
+);
+same(
+  like.map((t) => t.title),
+  ["Tesla", "Turbo Killer"],
+  "seed, duplicate and untitled entries are dropped",
+);
+
+// Picks open where the listener already is, and the query is escaped.
+same(
+  searchUrl("Spotify", { title: "A & B", artist: "X", why: "" }),
+  "spotify:search:X%20A%20%26%20B",
+  "spotify uri",
+);
+ok(
+  searchUrl("Chrome", { title: "A", artist: "X", why: "" }).startsWith("https://music.youtube.com/"),
+  "anything else goes to YouTube Music",
+);
+
+throws(() => parseSimilar("no json here"), /did not return JSON/);
+throws(() => parseSimilar('[{"artist":"X"}]'), /no usable tracks/);
 
 console.log("suggest: ok");

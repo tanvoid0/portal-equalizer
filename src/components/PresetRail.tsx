@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { GROUPS, Group, PRESETS, Preset, subsOf } from "../presets";
+import { GROUPS, Group, PRESETS, Preset, SIMPLE, subsOf } from "../presets";
+import { PresetMode } from "../types";
 import { HeadphonesIcon, NoteIcon, PresetShape, SceneIcon, ToneIcon, ToolIcon } from "./icons";
 
 const GROUP_ICON: Record<Group, (p: { className?: string }) => JSX.Element> = {
@@ -19,22 +20,32 @@ export function PresetRail({
   onPick,
   onPreview,
   disabled,
+  mode,
 }: {
   active: string;
   onPick: (name: string) => void;
   /** Pointer or keyboard focus landed on a preset - or left one, with null. */
   onPreview: (p: Preset | null) => void;
   disabled?: boolean;
+  mode: PresetMode;
 }) {
   const [query, setQuery] = useState("");
 
+  // The preset in use is always offered, even when Simple mode would hide it:
+  // switching to Simple must not make what you are listening to unpickable.
+  const catalogue = useMemo(
+    () =>
+      mode === "simple" ? PRESETS.filter((p) => SIMPLE.has(p.name) || p.name === active) : PRESETS,
+    [mode, active],
+  );
+
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return PRESETS;
-    return PRESETS.filter((p) =>
+    if (!q) return catalogue;
+    return catalogue.filter((p) =>
       `${p.name} ${p.sub ?? ""} ${p.group} ${p.blurb}`.toLowerCase().includes(q),
     );
-  }, [query]);
+  }, [query, catalogue]);
 
   const chips = (list: Preset[]) => (
     <div className="flex flex-wrap gap-1">
@@ -82,7 +93,7 @@ export function PresetRail({
           exactly when you have scrolled far enough to want it. */}
       <div className="sticky -top-4 z-10 -mx-4 -mt-4 flex items-center justify-between gap-3 bg-ink-900/95 px-4 pb-3 pt-4 backdrop-blur-xl">
         <h2 className="shrink-0 text-[13px] font-semibold tracking-tight text-slate-200">Presets</h2>
-        {PRESETS.length >= SEARCHABLE_FROM && (
+        {catalogue.length >= SEARCHABLE_FROM && (
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}

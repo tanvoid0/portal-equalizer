@@ -201,6 +201,32 @@ export const PRESETS: Preset[] = [
     gains: [0, 0, 0, 0, 0, 0, 0, -1, -4, -2] },
 ];
 
+/**
+ * What "Simple" mode offers: one obvious answer per intent, taken across the
+ * groups rather than a whole group at a time - a beginner wants "Rock", they
+ * just do not want it next to "Grunge", "Punk" and "Hard Rock".
+ */
+export const SIMPLE = new Set([
+  "Flat",
+  "Bass Boost",
+  "Treble Boost",
+  "V-Shape",
+  "Vocal",
+  "Warm",
+  "Bright",
+  "Rock",
+  "Pop",
+  "Electronic",
+  "Hip-Hop",
+  "Jazz",
+  "Classical",
+  "Cinema",
+  "Gaming",
+  "Podcast",
+  "Late Night",
+  "Loudness",
+]);
+
 /** Ordered second-level headings inside a group; empty when the group is flat. */
 export const subsOf = (group: Group) => [
   ...new Set(PRESETS.filter((p) => p.group === group && p.sub).map((p) => p.sub!)),

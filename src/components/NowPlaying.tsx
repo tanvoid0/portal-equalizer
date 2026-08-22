@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence, motion } from "motion/react";
-import { NowPlayingInfo, RepeatMode } from "../types";
+import { AiConfig, NowPlayingInfo, RepeatMode } from "../types";
+import { SimilarTrack, askSimilar, play } from "../similar";
 import { Spectrum } from "./Spectrum";
 
 const send = (action: string, value?: number, id?: string) =>
@@ -161,7 +162,7 @@ function Bar({
  * so it is only sent when the track changes) - and because both only fire on
  * *change*, a window that opens later pulls the current state once on mount.
  */
-export function NowPlaying() {
+export function NowPlaying({ cfg }: { cfg: AiConfig }) {
   const [np, setNp] = useState<NowPlayingInfo | null>(null);
   const [art, setArt] = useState<{ key: string; data: string | null } | null>(null);
   const [pos, setPos] = useState(0);
@@ -169,6 +170,10 @@ export function NowPlaying() {
   /** What we asked for but have not been told happened yet. */
   const [pending, setPending] = useState<boolean | null>(null);
   const [vol, setVol] = useState<number | null>(null);
+  /** "More like this", and the error from asking for it. */
+  const [similar, setSimilar] = useState<SimilarTrack[] | null>(null);
+  const [finding, setFinding] = useState(false);
+  const [simError, setSimError] = useState<string | null>(null);
   const volAt = useRef(0);
   const seeked = useRef({ ms: 0, at: 0 });
 
@@ -206,6 +211,25 @@ export function NowPlaying() {
 
   const playing = pending ?? np?.playing ?? false;
 
+  // A list is about the track it was asked for; a new one invalidates it.
+  useEffect(() => {
+    setSimilar(null);
+    setSimError(null);
+  }, [np?.title]);
+
+  const findSimilar = async () => {
+    setFinding(true);
+    setSimError(null);
+    try {
+      setSimilar(await askSimilar(cfg, np));
+    } catch (e) {
+      setSimilar(null);
+      setSimError(String(e));
+    } finally {
+      setFinding(false);
+    }
+  };
+
   useEffect(() => {
     setPos(base.current.ms);
     if (!playing) return;
@@ -241,6 +265,7 @@ export function NowPlaying() {
   const volume =
     vol !== null && performance.now() - volAt.current < VOLUME_GRACE ? vol : (np?.volume ?? 0);
   const others = np?.sources.filter((s) => s.id !== np.source_id) ?? [];
+  const store = /spotify/i.test(np?.app ?? "") ? "Spotify" : "YouTube Music";
 
   return (
     <AnimatePresence>
@@ -322,6 +347,19 @@ export function NowPlaying() {
                       {s.app}
                     </button>
                   ))}
+                  {/* Hidden without a model: the local tonal matcher cannot
+                      answer this one, so there would be nothing behind it. */}
+                  {cfg.model && np.title && (
+                    <button
+                      onClick={findSimilar}
+                      disabled={finding}
+                      title={`Ask the AI for tracks like this one, and open a pick in ${store}`}
+                      className="chip ml-auto shrink-0 border border-glow/30 bg-glow/[0.08] text-glow disabled:opacity-40"
+                    >
+                      <span className="pr-1 opacity-70">✦</span>
+                      {finding ? "Finding…" : "Similar"}
+                    </button>
+                  )}
                 </div>
                 <p className="truncate text-[11px] text-slate-500">{line || " "}</p>
 
@@ -439,6 +477,52 @@ export function NowPlaying() {
                 </span>
               </div>
             </div>
+
+            {/* SMTC controls the session that exists, it cannot queue into
+                someone else's app - so a pick opens a search there instead. */}
+            <AnimatePresence>
+              {(similar || simError) && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 36 }}
+                  className="relative overflow-hidden border-t border-white/[0.07]"
+                >
+                  <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5">
+                    {simError ? (
+                      <p className="text-[11px] text-rose-300">{simError}</p>
+                    ) : (
+                      similar!.map((t) => (
+                        <button
+                          key={`${t.artist}|${t.title}`}
+                          type="button"
+                          onClick={() =>
+                            play(np.app, t).catch((e) => setSimError(String(e)))
+                          }
+                          title={`${t.why || "Similar to this"} — opens a search in ${store}`}
+                          className="max-w-full truncate rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-slate-300 transition-colors hover:border-white/25 hover:text-slate-100"
+                        >
+                          {t.title}
+                          <span className="pl-1 text-slate-500">{t.artist}</span>
+                        </button>
+                      ))
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSimilar(null);
+                        setSimError(null);
+                      }}
+                      aria-label="Hide similar tracks"
+                      className="ml-auto shrink-0 text-[11px] text-slate-500 hover:text-slate-300"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </motion.section>
       )}

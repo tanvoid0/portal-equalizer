@@ -110,10 +110,13 @@ export const WandIcon = (p: P) => (
   </Svg>
 );
 
+// A hub ringed by eight detached spokes is a sun, not a gear - the teeth have
+// to be part of the body's outline. Six of them, because at 14px the eight-tooth
+// version fills its own gaps in.
 export const GearIcon = (p: P) => (
   <Svg {...p}>
-    <circle cx="12" cy="12" r="3.2" />
-    <path d="M12 2.5v2.2M12 19.3v2.2M21.5 12h-2.2M4.7 12H2.5M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6M18.7 18.7l-1.6-1.6M6.9 6.9 5.3 5.3" />
+    <path d="M 9.42 5.28 L 9.84 2.65 L 14.16 2.65 L 14.58 5.28 A 7.2 7.2 0 0 1 16.53 6.40 L 19.02 5.45 L 21.18 9.19 L 19.11 10.87 A 7.2 7.2 0 0 1 19.11 13.13 L 21.18 14.81 L 19.02 18.55 L 16.53 17.60 A 7.2 7.2 0 0 1 14.58 18.72 L 14.16 21.35 L 9.84 21.35 L 9.42 18.72 A 7.2 7.2 0 0 1 7.47 17.60 L 4.98 18.55 L 2.82 14.81 L 4.89 13.13 A 7.2 7.2 0 0 1 4.89 10.87 L 2.82 9.19 L 4.98 5.45 L 7.47 6.40 A 7.2 7.2 0 0 1 9.42 5.28 Z" />
+    <circle cx="12" cy="12" r="3.1" />
   </Svg>
 );
 

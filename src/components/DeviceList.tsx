@@ -138,7 +138,8 @@ export function DeviceList({
   selectedId,
   onSelect,
   autoSwitch,
-  onAutoSwitch,
+  showInactive,
+  showVirtual,
   ignored,
   onIgnore,
 }: {
@@ -150,15 +151,25 @@ export function DeviceList({
   onSmartOrganise: () => void;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Shown, not set, here: the switch for it lives in Settings. */
   autoSwitch: boolean;
-  onAutoSwitch: (v: boolean) => void;
+  showInactive: boolean;
+  showVirtual: boolean;
   ignored: string[];
   onIgnore: (id: string, off: boolean) => void;
 }) {
   const [showOff, setShowOff] = useState(false);
   const byId = new Map(devices.map((d) => [d.id, d]));
   const off = new Set(ignored);
-  const mine = order.filter((id) => byId.get(id)?.flow === flow);
+  // Whatever is playing right now is never hidden, whichever filter would
+  // otherwise catch it - a list that cannot show the device in use is lying.
+  const visible = (d: Device) =>
+    d.is_default ||
+    ((showInactive || d.state === "active") && (showVirtual || !d.virtual_device));
+  const mine = order.filter((id) => {
+    const d = byId.get(id);
+    return !!d && d.flow === flow && visible(d);
+  });
   const live = mine.filter((id) => !off.has(id));
   const hidden = mine.filter((id) => off.has(id));
   // Switched-off devices sink to the bottom, and stay out of the list entirely
@@ -199,27 +210,14 @@ export function DeviceList({
           ))}
         </div>
 
-        <button
-          onClick={() => onAutoSwitch(!autoSwitch)}
-          role="switch"
-          aria-checked={autoSwitch}
-          aria-label="Automatic device switching"
-          className="flex items-center gap-2 text-[11px] text-slate-400"
-        >
-          auto
+        {!autoSwitch && (
           <span
-            className={`flex h-4 w-7 items-center rounded-full px-0.5 transition-colors ${
-              autoSwitch ? "bg-glow/70" : "bg-white/10"
-            }`}
+            className="chip-quiet"
+            title="Automatic switching is off, so this list is a preference, not a rule. Turn it back on in Settings."
           >
-            <motion.span
-              layout
-              transition={{ type: "spring", stiffness: 700, damping: 40 }}
-              className="h-3 w-3 rounded-full bg-slate-100"
-              style={{ marginLeft: autoSwitch ? "auto" : 0 }}
-            />
+            manual
           </span>
-        </button>
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-2 pb-2">
