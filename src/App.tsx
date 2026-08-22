@@ -9,7 +9,8 @@ import { EqPanel } from "./components/EqPanel";
 import { NowPlaying } from "./components/NowPlaying";
 import { PresetRail } from "./components/PresetRail";
 import { SmartPreset } from "./components/SmartPreset";
-import { AlertIcon, DevicesIcon, PinIcon } from "./components/icons";
+import { Section, SettingsPage } from "./components/SettingsPage";
+import { AlertIcon, DevicesIcon, GearIcon, PinIcon } from "./components/icons";
 import { Preset, findPreset } from "./presets";
 import { AiConfig, Device, DeviceEq, EapoStatus, Flow, Settings, defaultEq } from "./types";
 
@@ -30,7 +31,40 @@ const EMPTY: Settings = {
   eapo_match: {},
   app_rules: [],
   ai: NO_AI,
+  show_inactive: true,
+  show_virtual: true,
+  preset_mode: "advanced",
+  close_to_tray: true,
+  start_minimised: false,
 };
+
+/**
+ * Three panels used to dim to 40% and stop responding with nothing said, which
+ * reads as broken rather than switched off. Both causes have a way out, so the
+ * notice carries it.
+ */
+function WhyOff({
+  reason,
+  action,
+  onAction,
+}: {
+  reason: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-10 grid place-items-center rounded-2xl bg-ink-900/40">
+      <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-ink-800/90 px-3 py-2 text-[11px] text-slate-300 shadow-lg shadow-black/40 backdrop-blur-sm">
+        <span>{reason}</span>
+        {action && onAction && (
+          <button onClick={onAction} className="btn-accent">
+            {action}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -48,6 +82,8 @@ export default function App() {
   const [toast, setToast] = useState<{ text: string; bad?: boolean } | null>(null);
   /** Preset under the pointer in the rail, ghosted on the equaliser. */
   const [preview, setPreview] = useState<Preset | null>(null);
+  /** Which settings section to open on, or null for closed. */
+  const [settingsAt, setSettingsAt] = useState<Section | null>(null);
 
   // The device list is the source of truth for *which* devices exist; the
   // priority list only says what order we want them in, so any device we have
@@ -161,13 +197,33 @@ export default function App() {
 
   const blocked = !status?.installed || !status.writable;
 
+  // Why the tone panels are inert, if they are. Ordered: you cannot turn the
+  // equaliser on for a device you have not chosen.
+  const why = !eqId
+    ? { reason: "No output selected." }
+    : !eq.enabled
+      ? { reason: "The equaliser is off.", action: "Turn on", onAction: () => setEq({ ...eq, enabled: true }) }
+      : null;
+
   return (
     <div className="flex h-full flex-col">
       <TitleBar
         subtitle={output ? `Equalising ${output.adapter || output.name}` : "Select an output"}
-      />
+      >
+        <button
+          onClick={() => setSettingsAt((at) => (at ? null : "general"))}
+          aria-label="Settings"
+          aria-pressed={!!settingsAt}
+          title="Settings"
+          className={`flex h-8 w-9 shrink-0 items-center justify-center transition-colors hover:bg-white/[0.08] ${
+            settingsAt ? "text-glow" : "text-bar-icon hover:text-bar-icon-hot"
+          }`}
+        >
+          <GearIcon className="h-4 w-4" />
+        </button>
+      </TitleBar>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+      <div className="relative flex min-h-0 flex-1 flex-col gap-3 p-3">
       {/* Nothing else in the app matters if the DSP engine cannot be reached. */}
       <AnimatePresence>
         {blocked && (
@@ -242,7 +298,8 @@ export default function App() {
           selectedId={picked[flow]}
           onSelect={selectDevice}
           autoSwitch={settings.auto_switch}
-          onAutoSwitch={(v) => update({ ...settings, auto_switch: v })}
+          showInactive={settings.show_inactive}
+          showVirtual={settings.show_virtual}
           ignored={settings.ignored}
           onIgnore={(id, off) =>
             update({
@@ -266,9 +323,12 @@ export default function App() {
             onChange={(next) => setEq(next, false)}
             onCommit={() => persist(settings)}
           />
+          <div className="relative min-h-0">
+          {why && <WhyOff {...why} />}
           <SmartPreset
             cfg={settings.ai ?? NO_AI}
             onCfg={(ai) => update({ ...settings, ai })}
+            onSettings={() => setSettingsAt("ai")}
             device={output}
             // With EQ off nothing is filtering, so the loopback is already the
             // raw signal and there is no applied curve to compensate for.
@@ -276,13 +336,16 @@ export default function App() {
             disabled={!eqId || !eq.enabled}
             onApply={(preset, gains) => setEq({ ...eq, preset, gains })}
           />
+          </div>
         </div>
 
         {/* Its own grid so the rail fills the column and scrolls inside itself,
             instead of growing the page. */}
-        <div className="grid min-h-0 grid-rows-[minmax(0,1fr)]">
+        <div className="relative grid min-h-0 grid-rows-[minmax(0,1fr)]">
+          {why && <WhyOff {...why} />}
           <PresetRail
             active={eq.preset}
+            mode={settings.preset_mode ?? "advanced"}
             onPreview={setPreview}
             disabled={!eqId || !eq.enabled}
             onPick={(name) => {
@@ -293,26 +356,43 @@ export default function App() {
         </div>
       </div>
 
-      <NowPlaying />
+      {/* The toast rides above the player rather than over it. When nothing is
+          playing NowPlaying renders nothing, this box collapses to zero height,
+          and the toast lands at the bottom of the window on its own. */}
+      <div className="relative shrink-0">
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 500, damping: 34 }}
+              className={`pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl border px-4 py-2 text-xs backdrop-blur-xl ${
+                toast.bad
+                  ? "border-glow-hot/40 bg-glow-hot/15 text-rose-200"
+                  : "border-glow/30 bg-glow/[0.12] text-glow"
+              }`}
+              role="status"
+            >
+              {toast.text}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <NowPlaying cfg={settings.ai ?? NO_AI} />
+      </div>
 
       <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: 16, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 500, damping: 34 }}
-            className={`pointer-events-none absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-xl border px-4 py-2 text-xs backdrop-blur-xl ${
-              toast.bad
-                ? "border-glow-hot/40 bg-glow-hot/15 text-rose-200"
-                : "border-glow/30 bg-glow/[0.12] text-glow"
-            }`}
-            role="status"
-          >
-            {toast.text}
-          </motion.div>
+        {settingsAt && (
+          <SettingsPage
+            settings={settings}
+            onChange={update}
+            status={status}
+            focus={settingsAt}
+            onClose={() => setSettingsAt(null)}
+          />
         )}
-        </AnimatePresence>
+      </AnimatePresence>
+
       </div>
     </div>
   );
