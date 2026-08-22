@@ -21,12 +21,17 @@ presets, a live analyser, and device switching.
 
 ## Installing
 
-Grab the installer from [Releases](../../releases) and run it. On first launch the
-Engine panel in Settings will offer to install Equalizer APO — that step needs
-administrator rights, asks which endpoints to hook, and wants a reboot afterwards.
+Grab the installer from [Releases](../../releases) and run it.
+
+Then open Settings → Engine and press **Install engine**. Equalizer APO's own
+installer takes over from there: it needs administrator rights, asks which endpoints
+to hook, and wants a reboot afterwards. Builds that ship with the engine bundled
+launch it directly; builds that do not open its download page instead, and the panel
+says which one you have.
 
 Until an endpoint is hooked, its EQ is silent. The Engine panel says so rather than
-letting you wonder.
+letting you wonder, and **Restore** puts every endpoint back the way it was if one
+ever goes quiet.
 
 ## Screenshots
 
