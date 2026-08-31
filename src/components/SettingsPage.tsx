@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion } from "motion/react";
-import { AiConfig, EapoStatus, PresetMode, Settings, SpotifyStatus } from "../types";
+import { AiConfig, AiModel, EapoStatus, PresetMode, Settings, SpotifyStatus } from "../types";
 import { PRESETS, SIMPLE } from "../presets";
 import { Switch } from "./Switch";
 import { AlertIcon, ChevronIcon, DevicesIcon, GearIcon, ToneIcon, WandIcon } from "./icons";
@@ -338,6 +338,18 @@ function Row({
   );
 }
 
+// Models by provider, both in the order the Rust side already sorted them. A
+// picker of 783 ids from one dead key and none from the live one is the shape
+// this exists to make visible.
+function grouped(models: AiModel[]): [string, string[]][] {
+  const by = new Map<string, string[]>();
+  for (const m of models) {
+    const key = m.provider || "unknown";
+    by.set(key, [...(by.get(key) ?? []), m.id]);
+  }
+  return [...by];
+}
+
 function Group({ id, title, children }: { id: Section; title: string; children: React.ReactNode }) {
   return (
     <section id={`settings-${id}`} className="panel scroll-mt-3 p-4">
@@ -364,7 +376,7 @@ export function SettingsPage({
   onClose: () => void;
 }) {
   const [autostart, setAutostart] = useState<boolean | null>(null);
-  const [models, setModels] = useState<string[]>([]);
+  const [models, setModels] = useState<AiModel[]>([]);
   const [conn, setConn] = useState<Conn>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -384,10 +396,13 @@ export function SettingsPage({
     try {
       // A server that answers with null rather than a list would otherwise take
       // the whole settings page down at the `models.length` below.
-      const ids = (await invoke<string[] | null>("ai_models", { cfg: settings.ai })) ?? [];
-      setModels(ids);
-      setConn({ ok: true, note: `${ids.length} models available` });
-      if (!settings.ai.model && ids.length) setAi({ model: ids[0] });
+      const found = (await invoke<AiModel[] | null>("ai_models", { cfg: settings.ai })) ?? [];
+      setModels(found);
+      const providers = new Set(found.map((m) => m.provider || "unknown"));
+      setConn({
+        ok: true,
+        note: `${found.length} models from ${[...providers].sort().join(", ")}`,
+      });
     } catch (e) {
       setConn({ ok: false, note: String(e) });
     }
@@ -598,7 +613,7 @@ export function SettingsPage({
               <input
                 value={ai.base_url}
                 onChange={(e) => setAi({ base_url: e.target.value })}
-                placeholder="http://127.0.0.1:18410"
+                placeholder="http://127.0.0.1:18410 (blank turns the AI off)"
                 className="field"
               />
 
@@ -619,10 +634,15 @@ export function SettingsPage({
                     onChange={(e) => setAi({ model: e.target.value })}
                     className="select"
                   >
-                    {models.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
+                    <option value="">Server default</option>
+                    {grouped(models).map(([provider, ids]) => (
+                      <optgroup key={provider} label={`${provider} (${ids.length})`}>
+                        {ids.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                   <ChevronIcon className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
@@ -631,7 +651,7 @@ export function SettingsPage({
                 <input
                   value={ai.model}
                   onChange={(e) => setAi({ model: e.target.value })}
-                  placeholder="model id"
+                  placeholder="blank uses the server's default"
                   className="field"
                 />
               )}

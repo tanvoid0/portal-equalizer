@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { AiConfig, Device, Features, NowPlayingInfo } from "../types";
+import { AiConfig, Device, Features, NowPlayingInfo, aiOn } from "../types";
 import {
   AiSuggestion,
   AutoApplied,
@@ -106,7 +106,7 @@ export function SmartPreset({
   );
 
   useEffect(() => {
-    if (disabled || busy || !cfg.auto || !cfg.model) return;
+    if (disabled || busy || !cfg.auto || !aiOn(cfg)) return;
     if (!features?.active) return;
     const trackChanged = (np?.title ?? "") !== lastTrack.current;
     if (!trackChanged && drift(lastNeed.current, need) <= DRIFT_DB) return;
@@ -186,10 +186,10 @@ export function SmartPreset({
           <button
             type="button"
             className={chip}
-            disabled={!cfg.model || busy || !features?.active}
+            disabled={!aiOn(cfg) || busy || !features?.active}
             onClick={() => features && ask(features)}
             title={
-              cfg.model
+              aiOn(cfg)
                 ? "Ask the AI, which also sees the track title and artist"
                 : "Connect an AI server in settings first"
             }

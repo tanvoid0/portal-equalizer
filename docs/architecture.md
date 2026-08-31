@@ -74,6 +74,12 @@ need the platform started with `AGENT_PLATFORM_CORS_ORIGINS` set for the Tauri o
 Token goes in Settings ⚙ or `$AGENT_PLATFORM_TOKEN`; blank means no auth header, which is
 what a default local install expects.
 
+We hold no opinion about *which* model answers. The model field is an override: left
+blank we send no `model` key at all and the platform routes to its own configured
+default, which stays right when a provider is added or a key runs dry. The server
+address is the on switch instead — blank there means no AI, and the local tonal match
+carries on alone.
+
 ## Settings
 
 One page behind the title bar's gear, and the settings the panels used to carry

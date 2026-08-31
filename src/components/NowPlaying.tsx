@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence, motion } from "motion/react";
-import { AiConfig, NowPlayingInfo, RepeatMode, SpotifyStatus } from "../types";
+import { AiConfig, NowPlayingInfo, RepeatMode, SpotifyStatus, aiOn } from "../types";
 import { Resolved, askSimilar, openSearch, playNow, queue, resolve } from "../similar";
 import { Spectrum } from "./Spectrum";
 
@@ -379,9 +379,9 @@ export function NowPlaying({ cfg }: { cfg: AiConfig }) {
                       {s.app}
                     </button>
                   ))}
-                  {/* Hidden without a model: the local tonal matcher cannot
+                  {/* Hidden without a server: the local tonal matcher cannot
                       answer this one, so there would be nothing behind it. */}
-                  {cfg.model && np.title && (
+                  {aiOn(cfg) && np.title && (
                     <button
                       onClick={findSimilar}
                       disabled={!!stage}

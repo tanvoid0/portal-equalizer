@@ -66,12 +66,20 @@ export interface AppRule {
 }
 
 /** Agent Platform connection used for AI preset suggestions. */
+/** One model the server offers, and the provider it came from. */
+export interface AiModel {
+  id: string;
+  /** `owned_by`. Empty when the server did not say. */
+  provider: string;
+}
+
 export interface AiConfig {
-  /** Host root of an OpenAI-compatible server, not a /v1 path. */
+  /** Host root of an OpenAI-compatible server, not a /v1 path. Empty is off:
+   * the local tonal match still works without a server. */
   base_url: string;
   /** Left empty, the Rust side falls back to $AGENT_PLATFORM_TOKEN. */
   token: string;
-  /** Empty means no AI: the local tonal match still works without one. */
+  /** Override. Empty lets the platform route to its own configured default. */
   model: string;
   /** Smart mode - re-ask on its own when what is playing changes character. */
   auto: boolean;
@@ -176,3 +184,12 @@ export const defaultEq = (): DeviceEq => ({
   preset: "Flat",
   gains: Array(BANDS.length).fill(0),
 });
+
+/**
+ * Is there an AI server to ask? `model` used to stand in for this, back when
+ * blank meant "no AI"; blank now means "let the platform choose", so the
+ * address is the only thing left that says whether to ask at all.
+ */
+export function aiOn(cfg: AiConfig): boolean {
+  return cfg.base_url.trim() !== "";
+}

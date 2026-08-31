@@ -79,7 +79,11 @@ export async function invoke(cmd: string, args?: any): Promise<any> {
         has_backup: true,
       };
     case "ai_models":
-      return ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"];
+      return [
+        { id: "claude-opus-5", provider: "anthropic" },
+        { id: "claude-sonnet-5", provider: "anthropic" },
+        { id: "llama3.1", provider: "ollama" },
+      ];
     case "install_engine":
       return "Installer running. Tick every endpoint you want EQ on, then reboot.";
     case "open_configurator":
