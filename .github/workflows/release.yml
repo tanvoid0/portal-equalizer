@@ -61,8 +61,32 @@ jobs:
         with:
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
           releaseName: 'Portal Equalizer v__VERSION__'
+          # The "What's new" section is per-release and is the one part of this
+          # body that goes stale: update it in the same commit that bumps the
+          # version, or the tag ships the previous release's notes. Everything
+          # under it is evergreen.
           releaseBody: |
             ## Portal Equalizer v__VERSION__
+
+            ### What's new in 0.3.0
+
+            **The AI panel no longer holds an opinion about which model runs.**
+            Leave **Model** on *Server default* and the request carries no model
+            at all, so your Agent Platform routes it with its own config - which
+            stays right when you add a provider or a key runs dry. Pick one from
+            the list only when you want to override that.
+
+            **Errors say what the server said.** A provider out of credit
+            answers 403, and this app used to report every 403 as "Agent
+            Platform rejected the token", which sent you to the one setting that
+            was fine. It now quotes the reason it was given.
+
+            **The model list is grouped by provider**, so you can see at a glance
+            that all 700 of those models come from one key.
+
+            **The server address is the on switch.** Clearing it turns the AI off;
+            it no longer quietly falls back to `127.0.0.1:18410`. The local tonal
+            match works without any server, as before.
 
             ### Needs Equalizer APO
 
