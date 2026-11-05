@@ -1,0 +1,66 @@
+{
+  "product": {
+    "tagline": "An equaliser for everything your Windows PC plays, with 85 presets, a live spectrum and audio that follows your headphones in and out.",
+    "summary": "Portal Equalizer gives Equalizer APO, the system-wide audio engine for Windows, the interface it never had. Shape the sound of each output with a ten-band EQ, let the app suggest a preset for whatever is playing, and have audio switch devices by your own priority order. The engine installs through its own installer from inside the app, and a Restore button puts every device back if one ever goes quiet.",
+    "features": [
+      {
+        "title": "Ten-band EQ for each device",
+        "detail": "Every output keeps its own curve, and the preamp is set for you so a boost never clips."
+      },
+      {
+        "title": "85 presets, or one obvious pick",
+        "detail": "Browse the whole catalogue in Advanced, or switch to Simple for one clear choice per intent."
+      },
+      {
+        "title": "A preset for what is playing",
+        "detail": "A live spectrum reads what the PC is playing and suggests a matching preset or a correction curve. Nothing changes until you click."
+      },
+      {
+        "title": "Smarter suggestions, if you want them",
+        "detail": "Point it at an Agent Platform server and suggestions also weigh the track title and artist. Leave the address blank and the local match works on its own."
+      },
+      {
+        "title": "Device switching by priority",
+        "detail": "Unplug the headphones and sound falls back to the next device on your list, the way you would have done it by hand."
+      },
+      {
+        "title": "Per-app routing",
+        "detail": "Pin one app to one output, say Spotify to the speakers, and leave the system default alone."
+      },
+      {
+        "title": "Now playing",
+        "detail": "See the current track with its cover art, and play, pause or skip from the window."
+      },
+      {
+        "title": "A way back",
+        "detail": "Your existing Equalizer APO config and every device's registry state are saved before the engine goes in, and Restore in Settings puts them back."
+      }
+    ],
+    "platforms": [
+      "Windows 10 and 11"
+    ]
+  },
+  "logo": "src-tauri/icons/128x128@2x.png",
+  "screenshots": [
+    {
+      "src": "docs/screenshots/01-player.png",
+      "caption": "The player",
+      "alt": "Ten-band equaliser on a V-shape curve for the Logi Z607 speakers, with the device priority list on the left, the preset catalogue on the right and the now-playing bar below"
+    },
+    {
+      "src": "docs/screenshots/02-app-rules.png",
+      "caption": "Per-app routing",
+      "alt": "App rules tab pinning spotify.exe to the Sennheiser HD 560S headphones, beside a Discord rule that was set in Windows rather than in the app"
+    },
+    {
+      "src": "docs/screenshots/03-settings.png",
+      "caption": "Settings",
+      "alt": "General and Devices settings: start with Windows, start hidden, close to tray, an update check, and automatic switching by priority turned on"
+    },
+    {
+      "src": "docs/screenshots/04-engine.png",
+      "caption": "The engine panel",
+      "alt": "Equalizer APO panel reporting the engine ready and hooked into three endpoints, with the generated config file path and a Restore button"
+    }
+  ]
+}
