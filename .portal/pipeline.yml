@@ -1,0 +1,54 @@
+# Portal Desktop release pipeline for Portal Equalizer.
+# Spec: portal_desktop/docs/development/ACTIONS.md
+#
+# Project -> Actions -> Release card. Rehearse runs `ship` with
+# RELEASE_DRY_RUN=1: install, checks, tests and a full local release build,
+# then scripts/release.mjs checks the tag and pushes nothing. Ship runs the same
+# steps for real and pushes main and the v<version> tag, which sets off
+# .github/workflows/release.yml to build, sign and publish the GitHub release.
+#
+# Bump the version (package.json, tauri.conf.json, Cargo.toml, Cargo.lock) and
+# the release.yml "What's new" section in one commit before either.
+#
+# pnpm goes through npx because the repo pins pnpm 11 (packageManager) and an
+# older global pnpm refuses this workspace file. npx also puts pnpm 11 first on
+# PATH for the build, so tauri's `pnpm build` hook gets the same one.
+version: 1
+
+release:
+  kind: tauri-github
+  ship: ship
+
+actions:
+  install:
+    name: Install dependencies
+    run: npx -y pnpm@11.22.0 install --frozen-lockfile
+  check:
+    name: Type check and self-check
+    run: npx -y pnpm@11.22.0 exec tsc --noEmit && npx -y pnpm@11.22.0 check
+  test:
+    name: Rust tests
+    run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+  build:
+    # The updater signing key lives in GitHub secrets only, so the local build
+    # proves everything up to the installers and leaves signing to CI.
+    name: Release build (unsigned)
+    run: npx -y pnpm@11.22.0 tauri build --no-sign
+    longRunning: true
+  publish:
+    name: Push main and the version tag
+    run: node scripts/release.mjs
+
+workflows:
+  ship:
+    name: Verify locally, then tag for GitHub
+    steps:
+      - action: install
+      - action: check
+        needs: [install]
+      - action: test
+        needs: [install]
+      - action: build
+        needs: [check, test]
+      - action: publish
+        needs: [build]

@@ -68,25 +68,18 @@ jobs:
           releaseBody: |
             ## Portal Equalizer v__VERSION__
 
-            ### What's new in 0.3.0
+            ### What's new in 0.3.1
 
-            **The AI panel no longer holds an opinion about which model runs.**
-            Leave **Model** on *Server default* and the request carries no model
-            at all, so your Agent Platform routes it with its own config - which
-            stays right when you add a provider or a key runs dry. Pick one from
-            the list only when you want to override that.
+            **The device list shows what you can play to.** A new install now
+            starts with **Settings → Devices → Show inactive devices** off, so
+            Bluetooth headsets that are paired but not connected, unplugged jacks
+            and old HDMI outputs stay out of the list. Existing installs keep
+            whatever you had chosen. Auto-switching has always skipped them.
 
-            **Errors say what the server said.** A provider out of credit
-            answers 403, and this app used to report every 403 as "Agent
-            Platform rejected the token", which sent you to the one setting that
-            was fine. It now quotes the reason it was given.
-
-            **The model list is grouped by provider**, so you can see at a glance
-            that all 700 of those models come from one key.
-
-            **The server address is the on switch.** Clearing it turns the AI off;
-            it no longer quietly falls back to `127.0.0.1:18410`. The local tonal
-            match works without any server, as before.
+            **Devices Windows has deleted are forgotten.** The priority list used
+            to keep every endpoint it had ever seen, long after Windows removed
+            it. Those dead entries are now dropped from your saved settings at
+            startup. Your EQ presets are untouched.
 
             ### Needs Equalizer APO
 
