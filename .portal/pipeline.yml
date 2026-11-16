@@ -18,6 +18,7 @@ version: 1
 release:
   kind: tauri-github
   ship: ship
+  rehearse: rehearse
 
 actions:
   install:
@@ -42,7 +43,7 @@ actions:
 workflows:
   ship:
     name: Verify locally, then tag for GitHub
-    steps:
+    steps: &steps
       - action: install
       - action: check
         needs: [install]
@@ -52,3 +53,8 @@ workflows:
         needs: [check, test]
       - action: publish
         needs: [build]
+  # Portal will not rehearse the ship workflow itself, so rehearse is the same
+  # steps by alias; only RELEASE_DRY_RUN differs, and release.mjs reads it.
+  rehearse:
+    name: Verify locally, push nothing
+    steps: *steps
