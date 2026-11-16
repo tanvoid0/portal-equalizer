@@ -193,3 +193,23 @@ export const defaultEq = (): DeviceEq => ({
 export function aiOn(cfg: AiConfig): boolean {
   return cfg.base_url.trim() !== "";
 }
+
+/**
+ * The priority list after a device scan. The scan is the source of truth for
+ * which devices exist; the priority list only orders them. So a device never
+ * seen before is appended, and an id Windows no longer has at all - not even
+ * as unplugged or absent - is dropped. Returns `s` itself when nothing changed.
+ */
+export function syncPriority(s: Settings, ds: Device[]): Settings {
+  const seen = new Set(ds.map((d) => d.id));
+  // A scan missing a whole flow is a failed read, not a machine that lost every
+  // input at once - pruning on it would wipe that half of the order.
+  // ponytail: a machine with no capture endpoints at all never prunes; harmless.
+  const whole = new Set(ds.map((d) => d.flow)).size === 2;
+  const kept = whole ? s.priority.filter((id) => seen.has(id)) : s.priority;
+  const known = new Set(s.priority);
+  const fresh = ds.filter((d) => !known.has(d.id)).map((d) => d.id);
+  return fresh.length || kept.length !== s.priority.length
+    ? { ...s, priority: [...kept, ...fresh] }
+    : s;
+}

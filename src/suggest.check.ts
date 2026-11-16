@@ -15,6 +15,7 @@ import {
   shouldAutoApply,
 } from "./suggest";
 import { bestMatch, parseSimilar, searchUrl } from "./similar";
+import { Device, Settings, syncPriority } from "./types";
 
 const ok = (cond: unknown, msg: string) => {
   if (!cond) throw new Error(msg);
@@ -202,5 +203,21 @@ same(
   "b",
   "the closest catalogue entry wins",
 );
+
+// Priority sync: dead ids go, new devices are appended, a half scan prunes nothing.
+{
+  const dev = (id: string, flow: "render" | "capture") => ({ id, flow }) as Device;
+  const s = { priority: ["a", "gone", "mic", "b"] } as Settings;
+  const scan = [dev("a", "render"), dev("b", "render"), dev("mic", "capture"), dev("new", "render")];
+  same(syncPriority(s, scan).priority, ["a", "mic", "b", "new"], "dead id dropped, new one appended");
+  same(
+    syncPriority(s, [dev("a", "render"), dev("b", "render")]).priority,
+    s.priority,
+    "a scan missing a flow prunes nothing",
+  );
+  same(syncPriority(s, []).priority, s.priority, "an empty scan prunes nothing");
+  const settled = { priority: ["a", "b", "mic"] } as Settings;
+  ok(syncPriority(settled, scan.slice(0, 3)) === settled, "no change hands back the same object");
+}
 
 console.log("suggest: ok");

@@ -12,7 +12,16 @@ import { SmartPreset } from "./components/SmartPreset";
 import { Section, SettingsPage } from "./components/SettingsPage";
 import { AlertIcon, DevicesIcon, GearIcon, PinIcon } from "./components/icons";
 import { Preset, findPreset } from "./presets";
-import { AiConfig, Device, DeviceEq, EapoStatus, Flow, Settings, defaultEq } from "./types";
+import {
+  AiConfig,
+  Device,
+  DeviceEq,
+  EapoStatus,
+  Flow,
+  Settings,
+  defaultEq,
+  syncPriority,
+} from "./types";
 
 const NO_AI: AiConfig = {
   base_url: "http://127.0.0.1:18410",
@@ -31,7 +40,7 @@ const EMPTY: Settings = {
   eapo_match: {},
   app_rules: [],
   ai: NO_AI,
-  show_inactive: true,
+  show_inactive: false,
   show_virtual: true,
   preset_mode: "advanced",
   close_to_tray: true,
@@ -85,15 +94,6 @@ export default function App() {
   /** Which settings section to open on, or null for closed. */
   const [settingsAt, setSettingsAt] = useState<Section | null>(null);
 
-  // The device list is the source of truth for *which* devices exist; the
-  // priority list only says what order we want them in, so any device we have
-  // never seen gets appended rather than silently dropped.
-  const withNewDevices = useCallback((s: Settings, ds: Device[]): Settings => {
-    const known = new Set(s.priority);
-    const fresh = ds.filter((d) => !known.has(d.id)).map((d) => d.id);
-    return fresh.length ? { ...s, priority: [...s.priority, ...fresh] } : s;
-  }, []);
-
   useEffect(() => {
     (async () => {
       const [s, ds, st] = await Promise.all([
@@ -103,7 +103,13 @@ export default function App() {
       ]);
       setDevices(ds);
       setStatus(st);
-      setSettings(withNewDevices(s, ds));
+      const next = syncPriority(s, ds);
+      setSettings(next);
+      // Write back what the scan changed, so dead ids leave settings.json too.
+      if (next !== s)
+        invoke("save_settings", { settings: next }).catch((e) =>
+          setToast({ text: String(e), bad: true }),
+        );
       setPicked({
         render: ds.find((d) => d.flow === "render" && d.is_default)?.id ?? null,
         capture: ds.find((d) => d.flow === "capture" && d.is_default)?.id ?? null,
@@ -113,7 +119,7 @@ export default function App() {
     const subs = [
       listen<Device[]>("devices", (e) => {
         setDevices(e.payload);
-        setSettings((s) => withNewDevices(s, e.payload));
+        setSettings((s) => syncPriority(s, e.payload));
       }),
       listen<Device>("switched", (e) =>
         setToast({ text: `Switched to ${e.payload.adapter || e.payload.name}` }),
@@ -123,7 +129,7 @@ export default function App() {
     return () => {
       subs.forEach((p) => p.then((f) => f()));
     };
-  }, [withNewDevices]);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;

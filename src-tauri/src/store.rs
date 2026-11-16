@@ -85,7 +85,7 @@ impl Default for Settings {
             eapo_match: HashMap::new(),
             app_rules: Vec::new(),
             ai: AiConfig::default(),
-            show_inactive: true,
+            show_inactive: false,
             show_virtual: true,
             preset_mode: "advanced".into(),
             close_to_tray: true,
