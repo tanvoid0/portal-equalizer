@@ -35,7 +35,6 @@ actions:
     # proves everything up to the installers and leaves signing to CI.
     name: Release build (unsigned)
     run: npx -y pnpm@11.22.0 tauri build --no-sign
-    longRunning: true
   publish:
     name: Push main and the version tag
     run: node scripts/release.mjs
