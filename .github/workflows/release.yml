@@ -68,6 +68,11 @@ jobs:
           releaseBody: |
             ## Portal Equalizer v__VERSION__
 
+            ### What's new in 0.3.2
+
+            Nothing changes in the app: 0.3.2 is a rebuild of 0.3.1. If you
+            are coming from 0.3.0, this is what 0.3.1 brought:
+
             ### What's new in 0.3.1
 
             **The device list shows what you can play to.** A new install now
